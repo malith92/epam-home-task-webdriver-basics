@@ -9,12 +9,16 @@ namespace EmailAccountTests
     public class Tests
     {
         IWebDriver driver;
-        DefaultWait<IWebDriver> fluentWait;
+        DefaultWait<IWebDriver> defaultWait;
+        WebDriverWait webDriverWait;
+
+        // Login credentials
         string EMAIL_ADDRESS = "ta3862989@gmail.com";
         string PASSWORD = "!QAZ2wsx!@";
-        string RECEIVERS_EMAIL_ADDRESS = "malithwanniarachchi@gmail.com";
-        //string CURRENT_DATE_TIME = DateTime.Now.ToString("F");
-        string EMAIL_SUBJECT = "Test Email";
+
+        // Email to be sent
+        string EMAIL_ADDRESSED_TO = "malithwanniarachchi@gmail.com";
+        string EMAIL_SUBJECT = "Test Email | ";
         string EMAIL_CONTENT = "Test Email Content";
 
         [OneTimeSetUp]
@@ -24,12 +28,18 @@ namespace EmailAccountTests
 
             driver.Manage().Window.Maximize();
 
-            fluentWait = new DefaultWait<IWebDriver>(driver);
-            fluentWait.Timeout = TimeSpan.FromSeconds(5);
-            fluentWait.PollingInterval = TimeSpan.FromMilliseconds(5000);
+            //driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(20);
 
-            fluentWait.IgnoreExceptionTypes(typeof(NoSuchElementException));
-            fluentWait.Message = "Element to be searched not found";
+            // Initialize defaultWait
+            defaultWait = new DefaultWait<IWebDriver>(driver);
+            defaultWait.Timeout = TimeSpan.FromSeconds(5);
+            defaultWait.PollingInterval = TimeSpan.FromMilliseconds(5000);
+            defaultWait.IgnoreExceptionTypes(typeof(NoSuchElementException));
+            defaultWait.IgnoreExceptionTypes(typeof(ElementClickInterceptedException));
+            defaultWait.Message = "Element to be searched not found";
+
+            // Initialize webDriverWait
+            webDriverWait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
 
             driver.Navigate().GoToUrl("https://accounts.google.com/ServiceLogin/signinchooser?service=mail");
         }
@@ -37,10 +47,11 @@ namespace EmailAccountTests
         [OneTimeTearDown]
         public void OneTimeTearDown()
         {
-            //driver.Close();
+            driver.Quit();
         }
 
-        private void LoginSteps()
+        [Test, Order(1)]
+        public void LoginTest()
         {
             // Type user name
             IWebElement emailAddressField = driver.FindElement(By.Id("identifierId"));
@@ -53,7 +64,7 @@ namespace EmailAccountTests
             emailAddressNextButton.Click();
 
             // Type password
-            IWebElement passwordField = fluentWait.Until(x => x.FindElement(By.Name("Passwd")));
+            IWebElement passwordField = defaultWait.Until(x => x.FindElement(By.Name("Passwd")));
             Console.WriteLine("passwordField is displayed : " + passwordField.Displayed);
             passwordField.SendKeys(PASSWORD);
 
@@ -62,7 +73,7 @@ namespace EmailAccountTests
             passwordNextButton.Click();
 
             // Wait till the gmail inbox page loads
-            new WebDriverWait(driver, TimeSpan.FromSeconds(10)).Until((IWebDriver driver) =>
+            webDriverWait.Until((IWebDriver driver) =>
             {
                 IJavaScriptExecutor javaScriptExecutor = (IJavaScriptExecutor)driver;
 
@@ -72,15 +83,9 @@ namespace EmailAccountTests
 
                 return scriptOutput;
             });
-        }
-
-        [Test]
-        public void LoginTest()
-        {
-            LoginSteps();
 
             // Get Gmail image displayed state
-            IWebElement gmailImage = fluentWait.Until(x => x.FindElement(By.XPath("//a[@title='Gmail']/img")));
+            IWebElement gmailImage = defaultWait.Until(x => x.FindElement(By.XPath("//a[@title='Gmail']/img")));
             bool gmailLinkDisplayed = gmailImage.Displayed;
             Console.WriteLine("Gmail Image is displayed : " + gmailLinkDisplayed);
 
@@ -88,7 +93,8 @@ namespace EmailAccountTests
             Assert.IsTrue(gmailLinkDisplayed);
         }
 
-        private void DraftEmailSteps()
+        [Test, Order(2)]
+        public void VerifyDraftedEmailPresentInDrafts()
         {
             // Click Compose button
             IWebElement composeButton = driver.FindElement(By.XPath("//div[text()='Compose']"));
@@ -96,12 +102,12 @@ namespace EmailAccountTests
             composeButton.Click();
 
             // Type receiver's email address
-            IWebElement receiverAddressTxtField = fluentWait.Until(x => x.FindElement(By.XPath("//div[@aria-label='Search Field']/div/input")));
-            //IWebElement receiverAddressTxtField = driver.FindElement(By.XPath("//div[@aria-label='Search Field']/div/input"));
-            receiverAddressTxtField.SendKeys(RECEIVERS_EMAIL_ADDRESS);
+            IWebElement receiverAddressTxtField = defaultWait.Until(x => x.FindElement(By.XPath("//div[@aria-label='Search Field']/div/input")));
+            receiverAddressTxtField.SendKeys(EMAIL_ADDRESSED_TO);
 
             // Type email subject
             IWebElement subjectTxtField = driver.FindElement(By.XPath("//input[@aria-label='Subject']"));
+            EMAIL_SUBJECT += DateTime.Now.ToString("F");
             subjectTxtField.SendKeys(EMAIL_SUBJECT);
 
             // Type email content
@@ -112,41 +118,102 @@ namespace EmailAccountTests
             IWebElement closeButton = driver.FindElement(By.XPath("//img[@aria-label='Save & close']"));
             closeButton.Click();
 
-        }
-
-        private void ViewDraftEmailsSteps()
-        {
             // Click on Drafts link
-            IWebElement draftsLink = fluentWait.Until(x => x.FindElement(By.XPath("//a[text()='Drafts']")));
-            //IWebElement draftsLink = driver.FindElement(By.XPath("//a[text()='Drafts']"));
+            IWebElement draftsLink = defaultWait.Until(x => x.FindElement(By.LinkText("Drafts")));
             draftsLink.Click();
 
-            //Click on Draft email
-            IWebElement draftEmailLink = fluentWait.Until(x => x.FindElement(By.XPath("//span[text()='Test Email']")));
-            draftEmailLink.Click();
+            // Click on Draft email
+            IWebElement previouslyCreatedDraftEmailElement = defaultWait.Until(x => x.FindElement(By.XPath("//span[text()='"+EMAIL_SUBJECT+"']/parent::span/parent::div")));
+            previouslyCreatedDraftEmailElement.Click();
+            
+            bool draftedEmailIsDisplayed = previouslyCreatedDraftEmailElement.Displayed;
 
-            //Get receivers email address from draft email
-            IWebElement draftEmailReceiversAddress = fluentWait.Until(x => x.FindElement(By.XPath("//div[@id=':7n']/span")));
-            string draftEmailReceiversEmailAddress = draftEmailReceiversAddress.GetAttribute("email");
+            Assert.IsTrue(draftedEmailIsDisplayed);
+        }
 
-            IWebElement draftEmailSubjectElement = fluentWait.Until(x => x.FindElement(By.XPath("//input[@name='subject']")));
+        [Test, Order(3)]
+        public void VerifyDraftEmailReceiver()
+        {
+            IWebElement draftEmailAddressedToElement = defaultWait.Until(x => x.FindElement(By.XPath("//span[@email='"+ EMAIL_ADDRESSED_TO + "']")));
+            bool draftEmailAddressedTo = draftEmailAddressedToElement.Displayed;
+
+            Assert.IsTrue(draftEmailAddressedTo);
+        }
+
+        [Test, Order(4)]
+        public void VerifyDraftEmailSubject()
+        {
+            IWebElement draftEmailSubjectElement = defaultWait.Until(x => x.FindElement(By.Name("subject")));
             string draftEmailSubject = draftEmailSubjectElement.GetAttribute("value");
 
-            IWebElement draftEmailBodyElement = fluentWait.Until(x => x.FindElement(By.XPath("//input[@aria-label='Message Body']")));
+            Assert.AreEqual(EMAIL_SUBJECT, draftEmailSubject);
+        }
+
+        [Test, Order(5)]
+        public void VerifyDraftEmailBody()
+        {
+            IWebElement draftEmailBodyElement = defaultWait.Until(x => x.FindElement(By.XPath("//div[@aria-label='Message Body']")));
             string draftEmailBody = draftEmailBodyElement.Text;
 
-            Assert.AreEqual(RECEIVERS_EMAIL_ADDRESS, draftEmailReceiversEmailAddress);
-            Assert.AreEqual(EMAIL_SUBJECT, draftEmailSubject);
             Assert.AreEqual(EMAIL_CONTENT, draftEmailBody);
         }
 
-        [Test]
-        public void verifyDraftEmail()
+        [Test, Order(6)]
+        public void VerifyDraftEmailDissapearedFromDrafts()
         {
-            DraftEmailSteps();
-            ViewDraftEmailsSteps();
+            // Click send button
+            IWebElement sendButtonElement = defaultWait.Until(x => x.FindElement(By.XPath("//div[text()='Send']")));
+            sendButtonElement.Click();
 
+            bool draftedEmailIsDisplayed;
+            try
+            {
+                IWebElement previouslyCreatedDraftEmailElement = defaultWait.Until(x => x.FindElement(By.XPath("//span[text()='" + EMAIL_SUBJECT + "']/parent::span/parent::div")));
+                draftedEmailIsDisplayed = previouslyCreatedDraftEmailElement.Displayed;
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine(e);
+                draftedEmailIsDisplayed = false;
+            }
 
+            Assert.IsFalse(draftedEmailIsDisplayed);
+        }
+
+        [Test, Order(7)]
+        public void VerifyMailIsinSentFolder()
+        {
+            // Click on Sent link
+            IWebElement sentLink = defaultWait.Until(x => x.FindElement(By.LinkText("Sent")));
+            sentLink.Click();
+
+            // Find the sent email in Sent folder
+            IWebElement sentEmailElement = defaultWait.Until(x => x.FindElement(By.XPath("//span[text()='" + EMAIL_SUBJECT + "']/parent::span/parent::div")));
+            bool sentEmailIsDisplayed = sentEmailElement.Displayed;
+
+            Assert.IsTrue(sentEmailIsDisplayed);
+        }
+
+        [Test, Order(8)]
+        public void LogOffTest()
+        {
+            // Click on account avatar
+            IWebElement avatarLinkElement = defaultWait.Until(x => x.FindElement(By.XPath("//a[contains(@aria-label,'Google Account: Test Account')]")));
+            avatarLinkElement.Click();
+
+            // Switch to account iframe
+            driver.SwitchTo().Frame("account");
+
+            // Click on Sigon out button
+            IWebElement signOutElement = defaultWait.Until(x => x.FindElement(By.XPath("//div[text()='Sign out']")));
+            signOutElement.Click();
+
+            // Find Account choose element in sigin in page
+            IWebElement chooseAccountElement = defaultWait.Until(x => x.FindElement(By.XPath("//div[text()='Test Account']")));
+
+            bool chooseAccountElementIsDisplayed = chooseAccountElement.Displayed;
+
+            Assert.IsTrue(chooseAccountElementIsDisplayed);
         }
     }
 }
